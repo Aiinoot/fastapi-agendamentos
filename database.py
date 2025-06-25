@@ -36,4 +36,4 @@ def criar_agendamento_teste():
 
     db.close()
 
-criar_agendamento_teste()
+# criar_agendamento_teste()

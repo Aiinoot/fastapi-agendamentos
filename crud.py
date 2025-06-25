@@ -3,7 +3,10 @@ from models import Agendamento, Usuario
 from schemas import AgendamentoCreate, UsuarioCreate
 from auth import gerar_hash_senha, verificar_senha
 from sqlalchemy.exc import SQLAlchemyError
-
+from fastapi import HTTPException, Depends
+from jose import JWTError
+from auth import verificar_token, oauth2_scheme
+from dependencies import get_db
 
 def criar_agendamento(db: Session, agendamento: AgendamentoCreate):
     try:
