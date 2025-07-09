@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from auth import criar_token_acesso, verificar_token
-from database import SessionLocal, engine
-from models import Base, Usuario
+from database import SessionLocal, engine, Base
+from models import Base, Usuario, Agendamento
 import crud
 import schemas
 
@@ -46,7 +46,7 @@ def criar_agendamento(
     db: Session = Depends(get_db),
     usuario: schemas.Usuario = Depends(get_usuario_logado)
 ):
-    novo = crud.criar_agendamento(db, agendamento)
+    novo = crud.criar_agendamento(db, agendamento, usuario.id) 
     if not novo:
         raise HTTPException(status_code=400, detail="Horário já agendado ou erro ao salvar.")
     return novo
@@ -57,7 +57,7 @@ def listar_agendamentos(
     usuario: schemas.Usuario = Depends(get_usuario_logado)
 ):
     try:
-        return crud.listar_agendamentos(db)
+        return crud.listar_agendamentos_por_usuario(db, usuario.id)  
     except Exception:
         raise HTTPException(status_code=500, detail="Erro ao listar agendamentos.")
 
@@ -68,7 +68,7 @@ def obter_agendamento(
     usuario: schemas.Usuario = Depends(get_usuario_logado)
 ):
     agendamento = crud.obter_agendamento(db, agendamento_id)
-    if not agendamento:
+    if not agendamento or agendamento.usuario_id != usuario.id: 
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
     return agendamento
 
@@ -79,7 +79,7 @@ def cancelar_agendamento(
     usuario: schemas.Usuario = Depends(get_usuario_logado)
 ):
     agendamento = crud.cancelar_agendamento(db, agendamento_id)
-    if not agendamento:
+    if not agendamento or agendamento.usuario_id != usuario.id:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado ou erro ao cancelar.")
     return agendamento
 
@@ -90,8 +90,22 @@ def confirmar_agendamento(
     usuario: schemas.Usuario = Depends(get_usuario_logado)
 ):
     agendamento = crud.confirmar_agendamento(db, agendamento_id)
-    if not agendamento:
+    if not agendamento or agendamento.usuario_id != usuario.id:
         raise HTTPException(status_code=400, detail="Não é possível confirmar um agendamento cancelado ou inexistente.")
+    return agendamento
+
+@app.delete("/agendamentos/{agendamento_id}", response_model=schemas.Agendamento, tags=["Agendamentos"])
+def deletar_agendamento(
+    agendamento_id: int,
+    db: Session = Depends(get_db),
+    usuario: schemas.Usuario = Depends(get_usuario_logado)
+):
+    agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
+    if not agendamento or agendamento.usuario_id != usuario.id:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+
+    db.delete(agendamento)
+    db.commit()
     return agendamento
 
 # Rotas públicas
@@ -111,3 +125,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     token = criar_token_acesso({"sub": usuario.email})
     return {"access_token": token, "token_type": "bearer"}
+
+@app.get("/me", response_model=schemas.Usuario, tags=["Autenticação"])
+def get_usuario_atual(usuario: Usuario = Depends(get_usuario_logado)):
+    return usuario

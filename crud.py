@@ -3,16 +3,20 @@ from models import Agendamento, Usuario
 from schemas import AgendamentoCreate, UsuarioCreate
 from auth import gerar_hash_senha, verificar_senha
 from sqlalchemy.exc import SQLAlchemyError
-from fastapi import HTTPException, Depends
-from jose import JWTError
-from auth import verificar_token, oauth2_scheme
-from dependencies import get_db
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+from models import Agendamento
 
-def criar_agendamento(db: Session, agendamento: AgendamentoCreate):
+def criar_agendamento(db: Session, agendamento: AgendamentoCreate, usuario_id: int):
     try:
+        print("→ Verificando conflito com:")
+        print("Data:", agendamento.data)
+        print("Hora:", agendamento.hora)
+        print("Usuário:", usuario_id)
         conflito = db.query(Agendamento).filter(
             Agendamento.data == agendamento.data,
             Agendamento.hora == agendamento.hora,
+            Agendamento.usuario_id == usuario_id,
             Agendamento.status != "cancelado"
         ).first()
 
@@ -24,7 +28,8 @@ def criar_agendamento(db: Session, agendamento: AgendamentoCreate):
             email=agendamento.email,
             data=agendamento.data,
             hora=agendamento.hora,
-            status="agendado"
+            status="agendado",
+            usuario_id=usuario_id
         )
 
         db.add(novo_agendamento)
@@ -37,59 +42,12 @@ def criar_agendamento(db: Session, agendamento: AgendamentoCreate):
         print(f"[ERRO] Erro ao criar agendamento: {e}")
         return None
 
-
-def listar_agendamentos(db: Session):
+def listar_agendamentos_por_usuario(db: Session, usuario_id: int):
     try:
-        return db.query(Agendamento).filter(Agendamento.status != "cancelado").all()
+        return db.query(Agendamento).filter(Agendamento.usuario_id == usuario_id).all()
     except SQLAlchemyError as e:
         print(f"[ERRO] Erro ao listar agendamentos: {e}")
         return []
-
-
-def obter_agendamento(db: Session, agendamento_id: int):
-    try:
-        return db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
-    except SQLAlchemyError as e:
-        print(f"[ERRO] Erro ao obter agendamento: {e}")
-        return None
-
-
-def cancelar_agendamento(db: Session, agendamento_id: int):
-    try:
-        agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
-        if not agendamento:
-            return None
-
-        if agendamento.status == "cancelado":
-            return agendamento  
-
-        agendamento.status = "cancelado"
-        db.commit()
-        db.refresh(agendamento)
-        return agendamento
-    except SQLAlchemyError as e:
-        db.rollback()
-        print(f"[ERRO] Erro ao cancelar agendamento: {e}")
-        return None
-
-
-def confirmar_agendamento(db: Session, agendamento_id: int):
-    try:
-        agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
-        if not agendamento:
-            return None
-
-        if agendamento.status == "cancelado":
-            return None  
-
-        agendamento.status = "confirmado"
-        db.commit()
-        db.refresh(agendamento)
-        return agendamento
-    except SQLAlchemyError as e:
-        db.rollback()
-        print(f"[ERRO] Erro ao confirmar agendamento: {e}")
-        return None
 
 def criar_usuario(db: Session, usuario: UsuarioCreate):
     usuario_existente = db.query(Usuario).filter(Usuario.email == usuario.email).first()
@@ -112,13 +70,23 @@ def autenticar_usuario(db: Session, email: str, senha: str):
         return None
     return usuario
 
-def get_usuario_logado(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    dados = verificar_token(token)
-    if not dados:
-        raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
+def obter_agendamento(db: Session, agendamento_id: int):
+    return db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
 
-    usuario = db.query(Usuario).filter(Usuario.email == dados.get("sub")).first()
-    if not usuario:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
-    
-    return usuario
+def confirmar_agendamento(db: Session, agendamento_id: int):
+    agendamento = obter_agendamento(db, agendamento_id)
+    if agendamento and agendamento.status != "cancelado":
+        agendamento.status = "confirmado"
+        db.commit()
+        db.refresh(agendamento)
+        return agendamento
+    return None
+
+def cancelar_agendamento(db: Session, agendamento_id: int):
+    agendamento = obter_agendamento(db, agendamento_id)
+    if agendamento and agendamento.status != "cancelado":
+        agendamento.status = "cancelado"
+        db.commit()
+        db.refresh(agendamento)
+        return agendamento
+    return None

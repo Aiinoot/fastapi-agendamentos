@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Date, Time
+from sqlalchemy import Column, Integer, String, Date, Time, ForeignKey
+from sqlalchemy.orm import relationship
 from database import Base
 
 class Agendamento(Base):
@@ -10,7 +11,10 @@ class Agendamento(Base):
     data = Column(Date, nullable=False)
     hora = Column(Time, nullable=False)
     status = Column(String, default="agendado")
-    
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+
+    usuario = relationship("Usuario", back_populates="agendamentos")
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -18,3 +22,5 @@ class Usuario(Base):
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     senha = Column(String, nullable=False)
+
+    agendamentos = relationship("Agendamento", back_populates="usuario")

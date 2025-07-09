@@ -13,6 +13,7 @@ class AgendamentoCreate(AgendamentoBase):
 class Agendamento(AgendamentoBase):
     id: int
     status: str
+    usuario_id: int
 
     class Config:
         orm_mode = True
@@ -33,3 +34,4 @@ class Usuario(UsuarioBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
